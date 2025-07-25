@@ -1,13 +1,12 @@
 import os
 import torch
-from models import D2WDMixer, D2WDMixer2
+from models import D2WDMixer
 
 
 class Exp_Basic(object):
     def __init__(self, args):
         self.args = args
         self.model_dict = {
-            'D2WDMixer2': D2WDMixer2,
             'D2WDMixer':D2WDMixer
         }
         self.device = self._acquire_device()
