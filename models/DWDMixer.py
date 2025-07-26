@@ -13,7 +13,6 @@ class DFT_series_decomp(nn.Module):
     """
     Series decomposition block
     """
-
     def __init__(self, top_k=5):
         super(DFT_series_decomp, self).__init__()
         self.top_k = top_k
@@ -27,6 +26,63 @@ class DFT_series_decomp(nn.Module):
         x_season = torch.fft.irfft(xf)
         x_trend = x - x_season
         return x_season, x_trend
+# for other wavelet bases    
+# def create_wavelet_filter(wave: str, in_channels: int):
+#     """
+#     Create wavelet decomposition and reconstruction filters for 1D conv.
+#     Returns:
+#         dec_filters: [2*in_channels, 1, K]
+#         rec_filters: [2*in_channels, 1, K]
+#     """
+#     w = pywt.Wavelet(wave)
+#     # Reverse for convolution
+#     dec_lo = torch.tensor(w.dec_lo[::-1], dtype=torch.float32)  # low-pass
+#     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=torch.float32)  # high-pass
+#     rec_lo = torch.tensor(w.rec_lo, dtype=torch.float32)        # already in correct order
+#     rec_hi = torch.tensor(w.rec_hi, dtype=torch.float32)
+#     base_dec = torch.stack([dec_lo, dec_hi], dim=0).unsqueeze(1)   # [2, 1, K]
+#     base_rec = torch.stack([rec_lo, rec_hi], dim=0).unsqueeze(1)
+#     dec_filters = base_dec.repeat(in_channels, 1, 1)  # [2*C, 1, K]
+#     rec_filters = base_rec.repeat(in_channels, 1, 1)  # [2*C, 1, K]
+#     return dec_filters, rec_filters
+
+# def wavelet_transform(x, dec_filters):
+#     """
+#     x: [B, C, L]
+#     dec_filters: [2*C, 1, K]
+#     Returns:
+#         approx: [B, C, L//2]
+#         detail: [B, C, L//2]
+#     """
+#     B, C, L = x.shape
+#     K = dec_filters.shape[-1]
+#     pad_len = K - 1
+#     # Symmetric padding: [pad_left, pad_right]
+#     x_padded = F.pad(x, (pad_len // 2, pad_len - pad_len // 2), mode='reflect')
+#     out = F.conv1d(x_padded, dec_filters.to(x.device), stride=2, groups=C)  # [B, 2C, L//2]
+#     approx, detail = out.chunk(2, dim=1)
+#     return approx, detail
+
+# def inverse_wavelet_transform(approx, detail, rec_filters):
+#     """
+#     approx, detail: [B, C, L]
+#     rec_filters: [2*C, 1, K]
+#     Returns:
+#         x: [B, C, 2*L]
+#     """
+#     B, C, L = approx.shape
+#     x = torch.cat([approx, detail], dim=1)  # [B, 2C, L]
+#     K = rec_filters.shape[-1]
+#     # Output length = stride * (L - 1) + K
+#     out = F.conv_transpose1d(x, rec_filters.to(x.device), stride=2, groups=C)  # [B, C, 2L + K - 2]
+#     # Crop to match exact size
+#     expected_len = 2 * L
+#     actual_len = out.shape[-1]
+#     crop = actual_len - expected_len
+#     crop_left = crop // 2
+#     crop_right = crop - crop_left
+#     out = out[:, :, crop_left:actual_len - crop_right]
+#     return out
 
 def create_wavelet_filter(wave: str, in_channels: int):
     w = pywt.Wavelet(wave)
@@ -65,6 +121,7 @@ def inverse_wavelet_transform(approx, detail, rec_filters):
     out = out[:, :, :2 * L]
     return out
 
+<<<<<<< HEAD:models/DWDMixer.py
 class DWTH(nn.Module):
     def __init__(self, configs, wavelet='haar', levels=2, seq_len=96, device='cuda'):
         super(DWTH, self).__init__()
@@ -93,50 +150,9 @@ class DWTH(nn.Module):
                            nn.Tanh()
                         ) for _ in range(configs.wt_level)
         ])
+=======
+>>>>>>> 8126f780ff67afdceff3b6ee134d8d200a242624:models/D2WDMixer.py
 
-        self.linears = torch.nn.ModuleList(
-            [
-                nn.Sequential(
-                    torch.nn.Linear(
-                        configs.d_model,
-                        configs.d_model*2,
-                    ),
-                    nn.GELU(),
-                    torch.nn.Linear(
-                        configs.d_model*2,
-                        configs.d_model,
-                    ),
-                )
-                for i in range(configs.wt_level)
-            ]
-        )
-
-        self.alpha = nn.Parameter(torch.tensor(0.5))
-        self.alpha1 = nn.Parameter(torch.tensor(0.5))
-        self.alpha2 = nn.Parameter(torch.tensor(0.5))
-
-    def forward(self, x):
-        B, C, T = x.shape
-        x_wt = x
-        x_ll, x_hh = [], []
-        for i in range(self.levels):
-            xl, xh = wavelet_transform(x_wt, self.wt_filter)
-            xl = self.linears[i](xl.permute(0, 2, 1)).permute(0, 2, 1)
-            xh = self.convs[i](xh)
-            x_ll.append(xl)
-            x_hh.append(xh)
-            x_wt = xh
-
-        next_feat = 0
-        for i in reversed(range(self.levels)):
-            curr_ll = x_ll.pop()
-            curr_hh = x_hh.pop()
-            curr_ll = curr_ll + self.alpha1 * next_feat
-            curr_hh = curr_hh + self.alpha2 * next_feat
-            next_feat = inverse_wavelet_transform(curr_ll, curr_hh, self.iwt_filter)
-
-        out = self.alpha * next_feat + self.linear(x.permute(0, 2, 1)).permute(0, 2, 1)
-        return out
 
 class DWTH_BLOCK(nn.Module):
 
@@ -355,8 +371,7 @@ class Model(nn.Module):
         dec_out = dec_out + out_res
         return dec_out
 
-    def pre_enc(self, x_list):
-        
+    def SeasonalTrendDecomposition(self, x_list):
             out1_list = []
             out2_list = []
             for x in x_list:
@@ -440,7 +455,7 @@ class Model(nn.Module):
                 x_list.append(x)
 
         enc_out_list = []
-        x_list = self.pre_enc(x_list)
+        x_list = self.SeasonalTrendDecomposition(x_list)
         if x_mark_enc is not None:
             for i, x, x_mark in zip(range(len(x_list[0])), x_list[0], x_mark_list):
                 enc_out = self.enc_embedding(x, x_mark)  # [B,T,C]
