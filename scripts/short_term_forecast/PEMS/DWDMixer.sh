@@ -1,6 +1,6 @@
 #export CUDA_VISIBLE_DEVICES=0
 
-model_name=D2WDMixer
+model_name=DWDMixer
 
 seq_len=96
 pred_len=12
