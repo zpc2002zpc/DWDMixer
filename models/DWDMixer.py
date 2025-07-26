@@ -121,39 +121,6 @@ def inverse_wavelet_transform(approx, detail, rec_filters):
     out = out[:, :, :2 * L]
     return out
 
-<<<<<<< HEAD:models/DWDMixer.py
-class DWTH(nn.Module):
-    def __init__(self, configs, wavelet='haar', levels=2, seq_len=96, device='cuda'):
-        super(DWTH, self).__init__()
-        self.device = device
-        self.levels = levels
-        mode = 'symmetric' 
-        self.dwt = DWT1DForward(wave=wavelet, J=1, mode=mode)  
-        self.idwt = DWT1DInverse(wave=wavelet)
-        self.wt_filter, self.iwt_filter = create_wavelet_filter(wavelet, configs.d_model)
-        self.wt_filter = nn.Parameter(self.wt_filter, requires_grad=False)
-        self.iwt_filter = nn.Parameter(self.iwt_filter, requires_grad=False)
-        
-        self.linear = nn.Sequential(
-                    torch.nn.Linear(
-                        configs.d_model,
-                        configs.d_model*2,
-                    ),
-                    nn.GELU(),
-                    torch.nn.Linear(
-                        configs.d_model*2,
-                        configs.d_model,
-                    ),
-                )
-        self.convs = nn.ModuleList([
-            nn.Sequential(nn.Conv1d(configs.d_model, configs.d_model, 3, padding='same', bias=True),
-                           nn.Tanh()
-                        ) for _ in range(configs.wt_level)
-        ])
-=======
->>>>>>> 8126f780ff67afdceff3b6ee134d8d200a242624:models/D2WDMixer.py
-
-
 class DWTH_BLOCK(nn.Module):
 
     def __init__(self, configs):
