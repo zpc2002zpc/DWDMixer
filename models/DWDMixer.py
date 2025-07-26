@@ -65,9 +65,9 @@ def inverse_wavelet_transform(approx, detail, rec_filters):
     out = out[:, :, :2 * L]
     return out
 
-class D2WTH(nn.Module):
+class DWTH(nn.Module):
     def __init__(self, configs, wavelet='haar', levels=2, seq_len=96, device='cuda'):
-        super(D2WTH, self).__init__()
+        super(DWTH, self).__init__()
         self.device = device
         self.levels = levels
         mode = 'symmetric' 
@@ -138,12 +138,12 @@ class D2WTH(nn.Module):
         out = self.alpha * next_feat + self.linear(x.permute(0, 2, 1)).permute(0, 2, 1)
         return out
 
-class D2WTH_BLOCK(nn.Module):
+class DWTH_BLOCK(nn.Module):
 
     def __init__(self, configs):
-        super(D2WTH_BLOCK, self).__init__()
-        self.D2WTH_list = nn.ModuleList([
-            D2WTH(configs, "haar", configs.wt_level, configs.seq_len//2**i)
+        super(DWTH_BLOCK, self).__init__()
+        self.DWTH_list = nn.ModuleList([
+            DWTH(configs, "haar", configs.wt_level, configs.seq_len//2**i)
             for i in range(configs.down_sampling_layers+1)
             ])
 
@@ -171,7 +171,7 @@ class D2WTH_BLOCK(nn.Module):
         out_list = []
         for i, x in enumerate(list):
             x = x.permute(0, 2, 1) 
-            x_wave = self.D2WTH_list[i](x)
+            x_wave = self.DWTH_list[i](x)
             out_list.append(x_wave.permute(0, 2, 1))  
         return out_list
         # list = [tensor.permute(0, 2, 1) for tensor in list]
@@ -180,21 +180,21 @@ class D2WTH_BLOCK(nn.Module):
         # out_list = []
         # for i in range(len(list)):
         #     if i <= 2:
-        #         x = self.D2WTH_list[i](x)
+        #         x = self.DWTH_list[i](x)
         #         out_list.append(x.permute(0, 2, 1))
         #         x_res = self.down_sampling_layers[i](x)
         #         x = next + x_res
         #         if i + 2 <= len(list) - 1:
         #             next = list[i + 2]
         #     else:
-        #         x = self.D2WTH_list[i](x)
+        #         x = self.DWTH_list[i](x)
         #         out_list.append(x.permute(0, 2, 1))
 
         # return out_list
 
-class D2WTH_MIXING(nn.Module):
+class DWTH_MIXING(nn.Module):
     def __init__(self, configs):
-        super(D2WTH_MIXING, self).__init__()
+        super(DWTH_MIXING, self).__init__()
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         self.down_sampling_window = configs.down_sampling_window
@@ -217,7 +217,7 @@ class D2WTH_MIXING(nn.Module):
                 nn.Linear(in_features=configs.d_ff, out_features=configs.d_model),
             )
 
-        self.D2WTH_BLOCK = D2WTH_BLOCK(configs)
+        self.DWTH_BLOCK = DWTH_BLOCK(configs)
 
 
         self.out_cross_layer = nn.Sequential(
@@ -227,7 +227,7 @@ class D2WTH_MIXING(nn.Module):
         )
 
     def forward(self, x_list):
-        out_list = self.D2WTH_BLOCK(x_list)
+        out_list = self.DWTH_BLOCK(x_list)
         return out_list
         # out_list = []
         #     for ori, out_season, out_trend, length in zip(x_list, out_season_list, out_trend_list,
@@ -250,7 +250,7 @@ class Model(nn.Module):
         self.pred_len = configs.pred_len
         self.down_sampling_window = configs.down_sampling_window
         self.channel_independence = configs.channel_independence
-        self.D2WTH_blocks = nn.ModuleList([D2WTH_MIXING(configs)
+        self.DWTH_blocks = nn.ModuleList([DWTH_MIXING(configs)
                                          for _ in range(configs.e_layers)])
 
         self.preprocess = series_decomp(configs.moving_avg)
@@ -453,7 +453,7 @@ class Model(nn.Module):
                 enc_out_list.append(enc_out)
         # enc_out_list = enc_out_list[::-1]
         for i in range(self.layer):
-            enc_out_list = self.D2WTH_blocks[i](enc_out_list)
+            enc_out_list = self.DWTH_blocks[i](enc_out_list)
         # enc_out_list = enc_out_list[::-1]
         dec_out_list = self.future_multi_mixing(B, enc_out_list, x_list)
 
@@ -492,7 +492,7 @@ class Model(nn.Module):
 
         # MultiScale-CrissCrossAttention  as encoder for past
         for i in range(self.layer):
-            enc_out_list = self.D2WTH_blocks[i](enc_out_list)
+            enc_out_list = self.DWTH_blocks[i](enc_out_list)
 
         enc_out = enc_out_list[0]
         # Output
@@ -527,7 +527,7 @@ class Model(nn.Module):
 
         # MultiScale-CrissCrossAttention  as encoder for past
         for i in range(self.layer):
-            enc_out_list = self.D2WTH_blocks[i](enc_out_list)
+            enc_out_list = self.DWTH_blocks[i](enc_out_list)
 
         dec_out = self.projection_layer(enc_out_list[0])
         dec_out = dec_out.reshape(B, self.configs.c_out, -1).permute(0, 2, 1).contiguous()
@@ -573,7 +573,7 @@ class Model(nn.Module):
 
         # MultiScale-CrissCrossAttention  as encoder for past
         for i in range(self.layer):
-            enc_out_list = self.D2WTH_blocks[i](enc_out_list)
+            enc_out_list = self.DWTH_blocks[i](enc_out_list)
 
         dec_out = self.projection_layer(enc_out_list[0])
         dec_out = dec_out.reshape(B, self.configs.c_out, -1).permute(0, 2, 1).contiguous()
