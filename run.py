@@ -10,7 +10,7 @@ random.seed(fix_seed)
 torch.manual_seed(fix_seed)
 np.random.seed(fix_seed)
 
-parser = argparse.ArgumentParser(description='D2WDMixer')
+parser = argparse.ArgumentParser(description='DWDMixer')
 
 # basic config
 parser.add_argument('--task_name', type=str, required=True, default='long_term_forecast',
