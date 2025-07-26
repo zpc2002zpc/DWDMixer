@@ -121,78 +121,7 @@ def inverse_wavelet_transform(approx, detail, rec_filters):
     out = out[:, :, :2 * L]
     return out
 
-class D2WTH(nn.Module):
-    def __init__(self, configs, wavelet='haar', levels=2, seq_len=96, device='cuda'):
-        super(D2WTH, self).__init__()
-        self.device = device
-        self.levels = levels
-        mode = 'symmetric' 
-        self.dwt = DWT1DForward(wave=wavelet, J=1, mode=mode)  
-        self.idwt = DWT1DInverse(wave=wavelet)
-        self.wt_filter, self.iwt_filter = create_wavelet_filter(wavelet, configs.d_model)
-        self.wt_filter = nn.Parameter(self.wt_filter, requires_grad=False)
-        self.iwt_filter = nn.Parameter(self.iwt_filter, requires_grad=False)
-        
-        self.linear = nn.Sequential(
-                    torch.nn.Linear(
-                        configs.d_model,
-                        configs.d_model*2,
-                    ),
-                    nn.GELU(),
-                    torch.nn.Linear(
-                        configs.d_model*2,
-                        configs.d_model,
-                    ),
-                )
-        self.convs = nn.ModuleList([
-            nn.Sequential(nn.Conv1d(configs.d_model, configs.d_model, 3, padding='same', bias=True),
-                           nn.Tanh()
-                        ) for _ in range(configs.wt_level)
-        ])
 
-        self.linears = torch.nn.ModuleList(
-            [
-                nn.Sequential(
-                    torch.nn.Linear(
-                        configs.d_model,
-                        configs.d_model*2,
-                    ),
-                    nn.GELU(),
-                    torch.nn.Linear(
-                        configs.d_model*2,
-                        configs.d_model,
-                    ),
-                )
-                for i in range(configs.wt_level)
-            ]
-        )
-
-        self.alpha = nn.Parameter(torch.tensor(0.5))
-        self.alpha1 = nn.Parameter(torch.tensor(0.5))
-        self.alpha2 = nn.Parameter(torch.tensor(0.5))
-
-    def forward(self, x):
-        B, C, T = x.shape
-        x_wt = x
-        x_ll, x_hh = [], []
-        for i in range(self.levels):
-            xl, xh = wavelet_transform(x_wt, self.wt_filter)
-            xl = self.linears[i](xl.permute(0, 2, 1)).permute(0, 2, 1)
-            xh = self.convs[i](xh)
-            x_ll.append(xl)
-            x_hh.append(xh)
-            x_wt = xh
-
-        next_feat = 0
-        for i in reversed(range(self.levels)):
-            curr_ll = x_ll.pop()
-            curr_hh = x_hh.pop()
-            curr_ll = curr_ll + self.alpha1 * next_feat
-            curr_hh = curr_hh + self.alpha2 * next_feat
-            next_feat = inverse_wavelet_transform(curr_ll, curr_hh, self.iwt_filter)
-
-        out = self.alpha * next_feat + self.linear(x.permute(0, 2, 1)).permute(0, 2, 1)
-        return out
 
 class D2WTH_BLOCK(nn.Module):
 
