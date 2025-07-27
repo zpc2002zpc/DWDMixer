@@ -26,6 +26,7 @@ class DFT_series_decomp(nn.Module):
         x_season = torch.fft.irfft(xf)
         x_trend = x - x_season
         return x_season, x_trend
+        
 # for other wavelet bases    
 # def create_wavelet_filter(wave: str, in_channels: int):
 #     """
@@ -86,12 +87,10 @@ class DFT_series_decomp(nn.Module):
 
 def create_wavelet_filter(wave: str, in_channels: int):
     w = pywt.Wavelet(wave)
-
     dec_lo = torch.tensor(w.dec_lo[::-1], dtype=torch.float)  # low-pass
     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=torch.float)
     base_dec_filters = torch.stack([dec_lo, dec_hi], dim=0).unsqueeze(1)  # [2, 1, K]
     dec_filters = base_dec_filters.repeat(in_channels, 1, 1)  # [2*C, 1, K]
-
     rec_lo = torch.tensor(w.rec_lo, dtype=torch.float)
     rec_hi = torch.tensor(w.rec_hi, dtype=torch.float)
     base_rec_filters = torch.stack([rec_lo, rec_hi], dim=0).unsqueeze(1)
@@ -103,11 +102,9 @@ def wavelet_transform(x, dec_filters):
     B, C, L = x.shape
     K = dec_filters.shape[-1]
     pad_len = (K - 1) // 2
-
     front = x[:, :, 0:1].repeat(1, 1, pad_len)
     end = x[:, :, -1:].repeat(1, 1, pad_len)
     x_padded = torch.cat([front, x, end], dim=2)  # [B, C, L + 2*pad_len]
-
     filters = dec_filters.to(x.device)
     out = F.conv1d(x_padded, filters, stride=2, padding=0, groups=C)
     approx, detail = out.chunk(2, dim=1)
@@ -122,15 +119,12 @@ def inverse_wavelet_transform(approx, detail, rec_filters):
     return out
 
 class DWTH_BLOCK(nn.Module):
-
     def __init__(self, configs):
         super(DWTH_BLOCK, self).__init__()
         self.DWTH_list = nn.ModuleList([
             DWTH(configs, "haar", configs.wt_level, configs.seq_len//2**i)
             for i in range(configs.down_sampling_layers+1)
             ])
-
-        
         self.down_sampling_layers = torch.nn.ModuleList(
             [
                 nn.Sequential(
@@ -181,34 +175,28 @@ class DWTH_MIXING(nn.Module):
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         self.down_sampling_window = configs.down_sampling_window
-
         self.layer_norm = nn.LayerNorm(configs.d_model)
         self.dropout = nn.Dropout(configs.dropout)
         self.channel_independence = configs.channel_independence
-
         if configs.decomp_method == 'moving_avg':
             self.decompsition = series_decomp(configs.moving_avg)
         elif configs.decomp_method == "dft_decomp":
             self.decompsition = DFT_series_decomp(configs.top_k)
         else:
             raise ValueError('decompsition is error')
-
         if configs.channel_independence == 0:
             self.cross_layer = nn.Sequential(
                 nn.Linear(in_features=configs.d_model, out_features=configs.d_ff),
                 nn.GELU(),
                 nn.Linear(in_features=configs.d_ff, out_features=configs.d_model),
             )
-
         self.DWTH_BLOCK = DWTH_BLOCK(configs)
-
-
         self.out_cross_layer = nn.Sequential(
             nn.Linear(in_features=configs.d_model, out_features=configs.d_ff),
             nn.GELU(),
             nn.Linear(in_features=configs.d_ff, out_features=configs.d_model),
         )
-
+        
     def forward(self, x_list):
         out_list = self.DWTH_BLOCK(x_list)
         return out_list
@@ -223,7 +211,6 @@ class DWTH_MIXING(nn.Module):
 
 
 class Model(nn.Module):
-
     def __init__(self, configs):
         super(Model, self).__init__()
         self.configs = configs
@@ -235,7 +222,6 @@ class Model(nn.Module):
         self.channel_independence = configs.channel_independence
         self.DWTH_blocks = nn.ModuleList([DWTH_MIXING(configs)
                                          for _ in range(configs.e_layers)])
-
         self.preprocess = series_decomp(configs.moving_avg)
         self.enc_in = configs.enc_in
         self.use_future_temporal_feature = configs.use_future_temporal_feature
@@ -264,7 +250,6 @@ class Model(nn.Module):
                 for i in range(configs.down_sampling_layers + 1)
             ]
         )
-
         if self.task_name == 'long_term_forecast' or self.task_name == 'short_term_forecast':
             self.predict_layers = torch.nn.ModuleList(
                 [
@@ -275,7 +260,6 @@ class Model(nn.Module):
                     for i in range(configs.down_sampling_layers + 1)
                 ]
             )
-
             if self.channel_independence == 1:
                 self.projection_layer = nn.Linear(
                     configs.d_model, 1, bias=True)
@@ -391,7 +375,6 @@ class Model(nn.Module):
         return x_enc, x_mark_enc
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
-        
         if self.use_future_temporal_feature:
             if self.channel_independence == 1:
                 B, T, N = x_enc.size()
@@ -399,7 +382,7 @@ class Model(nn.Module):
                 self.x_mark_dec = self.enc_embedding(None, x_mark_dec)
             else:
                 self.x_mark_dec = self.enc_embedding(None, x_mark_dec)
-
+        # multi_scale_Decomposition
         x_enc, x_mark_enc = self.__multi_scale_process_inputs(x_enc, x_mark_enc)
 
         x_list = []
@@ -420,9 +403,10 @@ class Model(nn.Module):
                 if self.channel_independence == 1:
                     x = x.permute(0, 2, 1).contiguous().reshape(B * N, T, 1)
                 x_list.append(x)
-
+        # Seasonal_Trend_Decomposition
         enc_out_list = []
         x_list = self.SeasonalTrendDecomposition(x_list)
+        # embedding
         if x_mark_enc is not None:
             for i, x, x_mark in zip(range(len(x_list[0])), x_list[0], x_mark_list):
                 enc_out = self.enc_embedding(x, x_mark)  # [B,T,C]
@@ -434,11 +418,12 @@ class Model(nn.Module):
                 enc_out = self.predict_linear[i](enc_out.permute(0, 2, 1)).permute( 0, 2, 1)                
                 enc_out_list.append(enc_out)
         # enc_out_list = enc_out_list[::-1]
+        # DWTH
         for i in range(self.layer):
             enc_out_list = self.DWTH_blocks[i](enc_out_list)
         # enc_out_list = enc_out_list[::-1]
+        # predict
         dec_out_list = self.future_multi_mixing(B, enc_out_list, x_list)
-
         dec_out = torch.stack(dec_out_list, dim=-1).sum(-1)
         dec_out = self.normalize_layers[0](dec_out, 'denorm')
         return dec_out
