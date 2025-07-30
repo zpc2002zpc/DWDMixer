@@ -117,6 +117,10 @@ def inverse_wavelet_transform(approx, detail, rec_filters):
     out = F.conv_transpose1d(x, filters, stride=2, padding=0, groups=C)  # [B, C, 2L]
     out = out[:, :, :2 * L]
     return out
+    
+# -------------------------------------------------------------
+# After the paper is accepted, we will open source the code of DWTH.
+# ----------------------------------------------------------------
 
 class DWTH_BLOCK(nn.Module):
     def __init__(self, configs):
