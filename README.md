@@ -1,4 +1,4 @@
-# 🌊 DWDMixer
+# DWDMixer
 
 > **DWDMixer: Detail-Aware Wavelet Decomposition and Mixing for Time Series Forecasting in IoT Systems**
 
